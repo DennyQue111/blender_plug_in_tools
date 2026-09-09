@@ -8,9 +8,9 @@ unfinished folders while developing.
 from __future__ import annotations
 
 ENABLED_PLUGINS = (
-    "blender_tool_shelf.plugins.hello_tool",
+    "hello_tool",
 )
 
 
 def discover_plugins() -> tuple[str, ...]:
-    return ENABLED_PLUGINS
+    return tuple(f"{__package__}.{name}" for name in ENABLED_PLUGINS)
