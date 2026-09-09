@@ -5,6 +5,32 @@ from __future__ import annotations
 import bpy
 
 
+class BTS_OT_refresh_shelf(bpy.types.Operator):
+    """Refresh the local Extension repository and Blender add-on metadata."""
+
+    bl_idname = "bts.refresh_shelf"
+    bl_label = "Refresh Tool Shelf"
+    bl_description = "Refresh the linked source directory and add-on metadata"
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        refreshed = []
+
+        if hasattr(bpy.ops, "extensions") and hasattr(
+            bpy.ops.extensions, "repo_refresh_all"
+        ):
+            bpy.ops.extensions.repo_refresh_all()
+            refreshed.append("extensions")
+
+        if hasattr(bpy.ops, "preferences") and hasattr(
+            bpy.ops.preferences, "addon_refresh"
+        ):
+            bpy.ops.preferences.addon_refresh()
+            refreshed.append("add-ons")
+
+        self.report({"INFO"}, "Tool Shelf refreshed: " + ", ".join(refreshed))
+        return {"FINISHED"}
+
+
 class VIEW3D_PT_tool_shelf(bpy.types.Panel):
     bl_label = "Tool Shelf"
     bl_idname = "VIEW3D_PT_blender_tool_shelf"
@@ -14,11 +40,54 @@ class VIEW3D_PT_tool_shelf(bpy.types.Panel):
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        layout.label(text="Blender Tool Shelf", icon="TOOL_SETTINGS")
-        layout.separator()
-        box = layout.box()
-        box.label(text="Installed tools", icon="PLUGIN")
-        box.operator("bts.hello_tool", icon="SOLO_ON")
+        header = layout.row(align=True)
+        header.label(text="Blender Tool Shelf", icon="TOOL_SETTINGS")
+        header.operator("bts.refresh_shelf", text="", icon="FILE_REFRESH")
+        layout.label(text="Choose a tool category below", icon="INFO")
 
 
-SHELF_CLASSES = (VIEW3D_PT_tool_shelf,)
+class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
+    bl_label = "Modeling"
+    bl_idname = "VIEW3D_PT_blender_tool_shelf_modeling"
+    bl_parent_id = "VIEW3D_PT_blender_tool_shelf"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool Shelf"
+
+    def draw(self, context: bpy.types.Context) -> None:
+        self.layout.operator("bts.hello_tool", text="Hello Tool", icon="SOLO_ON")
+
+
+class VIEW3D_PT_tool_shelf_rigging(bpy.types.Panel):
+    bl_label = "Rigging"
+    bl_idname = "VIEW3D_PT_blender_tool_shelf_rigging"
+    bl_parent_id = "VIEW3D_PT_blender_tool_shelf"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool Shelf"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context: bpy.types.Context) -> None:
+        self.layout.label(text="No rigging tools installed yet", icon="INFO")
+
+
+class VIEW3D_PT_tool_shelf_animation(bpy.types.Panel):
+    bl_label = "Animation"
+    bl_idname = "VIEW3D_PT_blender_tool_shelf_animation"
+    bl_parent_id = "VIEW3D_PT_blender_tool_shelf"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool Shelf"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context: bpy.types.Context) -> None:
+        self.layout.label(text="No animation tools installed yet", icon="INFO")
+
+
+SHELF_CLASSES = (
+    BTS_OT_refresh_shelf,
+    VIEW3D_PT_tool_shelf,
+    VIEW3D_PT_tool_shelf_modeling,
+    VIEW3D_PT_tool_shelf_rigging,
+    VIEW3D_PT_tool_shelf_animation,
+)
