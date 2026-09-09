@@ -1,0 +1,48 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*$py.class
+
+# Python tooling and local environments
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Blender backup and temporary files
+*.blend1
+*.blend2
+*.blend3
+*.blend4
+*.blend5
+*.blend@*
+*.bphys
+*.cache/
+
+# Extension/add-on build artifacts
+build/
+dist/
+*.zip
+*.whl
+
+# Logs and local settings
+*.log
+.env
+.env.*
+
+# IDE files
+.idea/
+.vscode/
+*.code-workspace
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini
+

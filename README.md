@@ -41,3 +41,31 @@ blender_plug_in_tools/
 ## 参考依据
 
 结构遵循 Blender 多文件 Add-on/Extension 的 `__init__.py` 入口和 manifest 约定，并吸收 Maya Module 常见的 scripts/plugins/icons/presets 分层方式。
+
+### 开发模式：映射源码目录
+
+开发时不建议反复安装 zip。可以把源码目录通过 Windows Junction 映射到 Blender 5.2 的本地 Extension 仓库。映射后，Blender 读取的就是源码目录，不需要重新压缩。
+
+修改或新增代码后，在 Blender Python Console 执行：
+
+```python
+bpy.ops.extensions.repo_refresh_all()
+bpy.ops.preferences.addon_refresh()
+```
+
+如果新增了 Operator、Panel 或新的插件包，刷新后再禁用并重新启用 **Blender Tool Shelf**；如果模块仍被缓存，直接重启 Blender。`bpy.ops.script.reload()` 适合重新读取普通脚本，但不保证清理已经注册的 Blender 类。
+
+### 新增插件
+
+1. 复制 `blender_tool_shelf/plugins/hello_tool` 为新的插件目录，例如 `my_tool`。
+2. 实现插件自己的 `register()`/`unregister()`，并在 `CLASSES` 中集中管理 Blender 类。
+3. 在 `blender_tool_shelf/plugins/__init__.py` 中加入目录名：
+
+```python
+ENABLED_PLUGINS = (
+    "hello_tool",
+    "my_tool",
+)
+```
+
+这里只填写插件目录名，不要写 `blender_tool_shelf.plugins.my_tool`；框架会根据当前 Add-on/Extension 包名自动生成正确的导入路径。
