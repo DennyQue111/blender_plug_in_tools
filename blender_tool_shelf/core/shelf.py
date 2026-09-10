@@ -55,7 +55,9 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
     bl_category = "Tool Shelf"
 
     def draw(self, context: bpy.types.Context) -> None:
-        self.layout.operator("bts.hello_tool", text="Hello Tool", icon="SOLO_ON")
+        layout = self.layout
+        layout.operator("bts.hello_tool", text="Hello Tool", icon="SOLO_ON")
+        layout.operator("bts.start_retopo_helper", text="Retopo Helper", icon="MESH_DATA")
 
 
 class VIEW3D_PT_tool_shelf_rigging(bpy.types.Panel):
