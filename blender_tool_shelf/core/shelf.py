@@ -67,8 +67,12 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
             box.prop(context.scene, "bts_vggt_bundle_adjustment", text="Bundle Adjustment")
             box.operator("bts.submit_vggt_job", icon="PLAY")
             row = box.row(align=True)
-            row.operator("bts.check_vggt_job", icon="FILE_REFRESH")
-            row.label(text=context.scene.bts_vggt_job_status)
+            row.operator("bts.check_vggt_job", text="Refresh Status / Log", icon="FILE_REFRESH")
+            box.label(text="Status: " + context.scene.bts_vggt_job_status)
+            if context.scene.bts_vggt_log_tail:
+                box.label(text="Latest VGGT log:", icon="TEXT")
+                for line in context.scene.bts_vggt_log_tail.splitlines()[-4:]:
+                    box.label(text=line[:88])
             if context.scene.bts_vggt_job_status == "succeeded":
                 box.operator("bts.import_vggt_point_cloud", icon="MESH_DATA")
 

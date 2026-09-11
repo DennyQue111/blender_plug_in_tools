@@ -35,6 +35,17 @@ class Job:
     error: str | None = None
 
 
+def _read_log_tail(job: Job, line_count: int = 12) -> str:
+    log_path = Path(job.directory) / "vggt.log"
+    if not log_path.is_file():
+        return "Waiting for VGGT process to start..."
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return "\n".join(lines[-line_count:])
+    except OSError as exc:
+        return f"Could not read log: {exc}"
+
+
 def _run_job(job_id: str, source: Path, settings: Settings) -> None:
     job = JOBS[job_id]
     job.status = "running"
@@ -45,6 +56,7 @@ def _run_job(job_id: str, source: Path, settings: Settings) -> None:
 
     command = [
         str(settings.python_executable),
+        "-u",
         str(settings.vggt_repository / "demo_colmap.py"),
         f"--scene_dir={job_dir / 'input'}",
     ]
@@ -101,4 +113,6 @@ def get_job(job_id: str) -> dict[str, object]:
     job = JOBS.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown job")
-    return asdict(job)
+    response = asdict(job)
+    response["log_tail"] = _read_log_tail(job)
+    return response

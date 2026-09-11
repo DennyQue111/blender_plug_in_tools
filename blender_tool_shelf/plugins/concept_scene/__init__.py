@@ -100,8 +100,11 @@ class BTS_OT_check_vggt_job(bpy.types.Operator):
         status = result.get("status", "unknown")
         error = result.get("error")
         directory = result.get("directory")
+        log_tail = result.get("log_tail")
         if isinstance(directory, str):
             scene.bts_vggt_job_directory = directory
+        if isinstance(log_tail, str):
+            scene.bts_vggt_log_tail = log_tail
         scene.bts_vggt_job_status = str(status if not error else f"{status}: {error}")
         self.report({"INFO"}, f"VGGT job status: {status}")
         return {"FINISHED"}
@@ -152,6 +155,7 @@ def register() -> None:
     bpy.types.Scene.bts_vggt_job_id = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_status_path = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_job_directory = StringProperty(options={"HIDDEN"})
+    bpy.types.Scene.bts_vggt_log_tail = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_job_status = StringProperty(default="Service not contacted")
 
 
@@ -159,6 +163,7 @@ def unregister() -> None:
     for name in (
         "bts_vggt_job_status",
         "bts_vggt_job_directory",
+        "bts_vggt_log_tail",
         "bts_vggt_status_path",
         "bts_vggt_job_id",
         "bts_vggt_bundle_adjustment",
