@@ -30,7 +30,7 @@ if (-not (Test-Path (Join-Path $vggtRepo ".git"))) {
 
 Write-Host "Installing pinned scene-AI dependencies..."
 & $pythonExe -m pip install --upgrade pip
-& $pythonExe -m pip install --index-url "https://download.pytorch.org/whl/$TorchCuda" -c $constraints torch==2.3.1 torchvision==0.18.1
+& $pythonExe -m pip install --index-url "https://download.pytorch.org/whl/$TorchCuda" --extra-index-url "https://pypi.org/simple" -c $constraints torch==2.3.1 torchvision==0.18.1
 & $pythonExe -m pip install -r (Join-Path $vggtRepo "requirements.txt") -r (Join-Path $projectRoot "scene_ai_service\requirements.txt") -c $constraints
 
 Write-Host "Verifying Python, NumPy and CUDA..."
