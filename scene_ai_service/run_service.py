@@ -11,8 +11,16 @@ import uvicorn
 
 def main() -> None:
     service_root = Path(__file__).resolve().parent
+    repository_candidates = (
+        service_root / "vendor" / "vggt",
+        service_root.parent / "vendor" / "vggt",
+    )
+    default_repository = next(
+        (candidate for candidate in repository_candidates if candidate.is_dir()),
+        repository_candidates[0],
+    )
     parser = argparse.ArgumentParser(description="Start the local VGGT scene service")
-    parser.add_argument("--vggt-repo", type=Path, default=service_root / "vendor" / "vggt")
+    parser.add_argument("--vggt-repo", type=Path, default=default_repository)
     parser.add_argument("--workspace", type=Path, default=service_root / "workspace")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()

@@ -24,7 +24,7 @@ The first inference downloads the VGGT weights. Do not create this environment i
 .\.venv\Scripts\python.exe run_service.py
 ```
 
-The launcher automatically finds `vendor/vggt`, uses its own virtual-environment Python, and creates `workspace` when needed. The service binds to `127.0.0.1` only: it is local to this computer and is not exposed to the network.
+The launcher automatically finds either `scene_ai_service/vendor/vggt` or the project's `vendor/vggt`, uses its own virtual-environment Python, and creates `workspace` when needed. The service binds to `127.0.0.1` only: it is local to this computer and is not exposed to the network.
 
 If VGGT is in another directory or port `8765` is occupied:
 
