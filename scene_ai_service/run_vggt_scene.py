@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -12,6 +14,11 @@ import torch
 import torch.nn.functional as functional
 import trimesh
 from PIL import Image
+
+repository = Path(os.environ["VGGT_REPO"]).resolve()
+if not (repository / "vggt").is_dir():
+    raise RuntimeError(f"VGGT_REPO does not contain the vggt package: {repository}")
+sys.path.insert(0, str(repository))
 
 from vggt.models.vggt import VGGT
 from vggt.utils.geometry import unproject_depth_map_to_point_map
