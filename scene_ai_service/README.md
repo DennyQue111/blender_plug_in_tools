@@ -6,14 +6,15 @@ The first version is a small local HTTP service. It accepts an absolute image pa
 
 ## 1. Install VGGT in an external environment
 
-From this directory, create and activate a normal Python 3.10+ virtual environment, then clone/install VGGT following its official instructions:
+From the project root, create and activate a normal Python 3.10+ virtual environment, then clone/install VGGT and its COLMAP-demo dependencies:
 
 ```powershell
 py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 git clone https://github.com/facebookresearch/vggt.git vendor\vggt
-pip install -r vendor\vggt\requirements.txt
-pip install -r requirements.txt
+python -m pip install -r .\vendor\vggt\requirements.txt
+python -m pip install -r .\vendor\vggt\requirements_demo.txt
+python -m pip install -r .\scene_ai_service\requirements.txt
 ```
 
 The first inference downloads the VGGT weights. Do not create this environment inside `blender_tool_shelf`; Blender must not import it.
@@ -21,7 +22,7 @@ The first inference downloads the VGGT weights. Do not create this environment i
 ## 2. Start the service
 
 ```powershell
-.\.venv\Scripts\python.exe run_service.py
+.\.venv\Scripts\python.exe .\scene_ai_service\run_service.py
 ```
 
 The launcher automatically finds either `scene_ai_service/vendor/vggt` or the project's `vendor/vggt`, uses its own virtual-environment Python, and creates `workspace` when needed. The service binds to `127.0.0.1` only: it is local to this computer and is not exposed to the network.
@@ -29,7 +30,7 @@ The launcher automatically finds either `scene_ai_service/vendor/vggt` or the pr
 If VGGT is in another directory or port `8765` is occupied:
 
 ```powershell
-.\.venv\Scripts\python.exe run_service.py --vggt-repo D:\AI\vggt --port 8766
+.\.venv\Scripts\python.exe .\scene_ai_service\run_service.py --vggt-repo D:\AI\vggt --port 8766
 ```
 
 ## 3. Submit a job
