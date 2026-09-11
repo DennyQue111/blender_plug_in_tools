@@ -6,6 +6,8 @@ The first version is a small local HTTP service. It accepts an absolute image pa
 
 ## 1. Install VGGT in an external environment
 
+For the maintained Windows setup, run `.\setup_scene_ai.ps1` from the project root instead. The manual steps below are retained for reference.
+
 From the project root, create and activate a normal Python 3.10+ virtual environment, then clone/install VGGT and its COLMAP-demo dependencies:
 
 ```powershell

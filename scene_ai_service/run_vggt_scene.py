@@ -78,7 +78,10 @@ def main() -> None:
     print(f"Loading VGGT model from {MODEL_URL}")
     model = VGGT()
     model.load_state_dict(torch.hub.load_state_dict_from_url(MODEL_URL, map_location="cpu"))
-    model.eval().to(device)
+    model.eval()
+    if device.type == "cuda":
+        model.half()
+    model.to(device)
 
     images, original_coordinates = load_and_preprocess_images_square(image_paths, 1024)
     images = images.to(device)

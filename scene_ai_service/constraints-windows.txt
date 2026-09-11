@@ -1,0 +1,8 @@
+# Torch 2.3.1 was compiled against NumPy 1.x.
+numpy==1.26.1
+
+# Later OpenCV wheels require NumPy 2, which breaks Torch 2.3.1's NumPy bridge.
+opencv-python==4.10.0.84
+
+# Keep the transitive PLY utility compatible with NumPy 1.x.
+plyfile==1.0.3
