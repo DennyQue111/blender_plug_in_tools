@@ -69,3 +69,7 @@ ENABLED_PLUGINS = (
 ```
 
 这里只填写插件目录名，不要写 `blender_tool_shelf.plugins.my_tool`；框架会根据当前 Add-on/Extension 包名自动生成正确的导入路径。
+
+## AI 场景服务（开发中）
+
+scene_ai_service 是与 Blender 隔离的本地 VGGT 服务。它将概念图或参考图交给独立 Python 环境中的 VGGT，输出 COLMAP 相机与点云数据；未来 Shelf 再负责提交任务和导入结果。这样不会把 PyTorch、CUDA 与模型权重装进 Blender 自带 Python。具体安装、启动和测试方法见 [scene_ai_service/README.md](scene_ai_service/README.md)。

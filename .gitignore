@@ -46,3 +46,8 @@ dist/
 Thumbs.db
 desktop.ini
 
+
+# Local AI inference service: environments, weights and generated jobs.
+scene_ai_service/.venv/
+scene_ai_service/vendor/
+scene_ai_service/workspace/

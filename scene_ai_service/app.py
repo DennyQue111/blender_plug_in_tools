@@ -1,0 +1,104 @@
+"""Local task service that runs the upstream VGGT COLMAP export demo."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import threading
+import uuid
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+
+from settings import Settings, load_settings
+
+
+app = FastAPI(title="Local VGGT Scene Service", version="0.1.0")
+SETTINGS = load_settings()
+JOBS: dict[str, "Job"] = {}
+
+
+class CreateJobRequest(BaseModel):
+    image_path: Path = Field(description="Absolute path to a concept/reference image")
+    bundle_adjustment: bool = Field(default=False)
+
+
+@dataclass
+class Job:
+    id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    directory: str
+    bundle_adjustment: bool
+    error: str | None = None
+
+
+def _run_job(job_id: str, source: Path, settings: Settings) -> None:
+    job = JOBS[job_id]
+    job.status = "running"
+    job_dir = Path(job.directory)
+    image_dir = job_dir / "input" / "images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, image_dir / source.name)
+
+    command = [
+        str(settings.python_executable),
+        str(settings.vggt_repository / "demo_colmap.py"),
+        f"--scene_dir={job_dir / 'input'}",
+    ]
+    if job.bundle_adjustment:
+        command.append("--use_ba")
+
+    log_path = job_dir / "vggt.log"
+    try:
+        with log_path.open("w", encoding="utf-8") as log_file:
+            subprocess.run(
+                command,
+                cwd=settings.vggt_repository,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                check=True,
+                timeout=settings.job_timeout_seconds,
+            )
+        output_dir = job_dir / "input" / "sparse"
+        if not output_dir.exists():
+            raise RuntimeError("VGGT finished without creating a COLMAP sparse output directory")
+        job.status = "succeeded"
+    except Exception as exc:
+        job.status = "failed"
+        job.error = str(exc)
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok", "vggt_repository": str(SETTINGS.vggt_repository)}
+
+
+@app.post("/jobs", status_code=202)
+def create_job(request: CreateJobRequest) -> dict[str, str]:
+    source = request.image_path.expanduser().resolve()
+    if not source.is_file():
+        raise HTTPException(status_code=400, detail="image_path must be an existing file")
+
+    job_id = uuid.uuid4().hex
+    job_dir = SETTINGS.workspace / "jobs" / job_id
+    job_dir.mkdir(parents=True)
+    JOBS[job_id] = Job(
+        id=job_id,
+        status="queued",
+        directory=str(job_dir),
+        bundle_adjustment=request.bundle_adjustment,
+    )
+    thread = threading.Thread(target=_run_job, args=(job_id, source, SETTINGS), daemon=True)
+    thread.start()
+    return {"job_id": job_id, "status_url": f"/jobs/{job_id}"}
+
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str) -> dict[str, object]:
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown job")
+    return asdict(job)
