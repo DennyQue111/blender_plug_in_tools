@@ -18,16 +18,19 @@ pip install -r requirements.txt
 
 The first inference downloads the VGGT weights. Do not create this environment inside `blender_tool_shelf`; Blender must not import it.
 
-## 2. Configure and run
+## 2. Start the service
 
 ```powershell
-$env:VGGT_REPO = (Resolve-Path .\vendor\vggt)
-$env:VGGT_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe)
-$env:VGGT_WORKSPACE = (Join-Path $PWD "workspace")
-.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8765
+.\.venv\Scripts\python.exe run_service.py
 ```
 
-The service binds to `127.0.0.1` only: it is local to this computer and is not exposed to the network.
+The launcher automatically finds `vendor/vggt`, uses its own virtual-environment Python, and creates `workspace` when needed. The service binds to `127.0.0.1` only: it is local to this computer and is not exposed to the network.
+
+If VGGT is in another directory or port `8765` is occupied:
+
+```powershell
+.\.venv\Scripts\python.exe run_service.py --vggt-repo D:\AI\vggt --port 8766
+```
 
 ## 3. Submit a job
 
