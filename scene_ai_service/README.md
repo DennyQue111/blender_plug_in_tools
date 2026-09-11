@@ -2,7 +2,7 @@
 
 This is deliberately separate from the Blender extension. Blender's bundled Python stays clean; VGGT, PyTorch, CUDA and the model weights live in their own virtual environment.
 
-The first version is a small local HTTP service. It accepts an absolute image path, copies the image into a per-job working directory, then runs VGGT's official `demo_colmap.py`. The output is a COLMAP-compatible reconstruction that Blender can import in a later Shelf tool.
+The first version is a small local HTTP service. It accepts an absolute image path, copies the image into a per-job working directory, then runs VGGT directly. It writes a Blender-friendly point cloud, depth data, and camera JSON without requiring PyCOLMAP.
 
 ## 1. Install VGGT in an external environment
 
@@ -13,7 +13,6 @@ py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 git clone https://github.com/facebookresearch/vggt.git vendor\vggt
 python -m pip install -r .\vendor\vggt\requirements.txt
-python -m pip install -r .\vendor\vggt\requirements_demo.txt
 python -m pip install -r .\scene_ai_service\requirements.txt
 ```
 
@@ -44,10 +43,14 @@ Check the returned `status_url`. On success, the job directory contains:
 ```text
 workspace/jobs/<job-id>/
 ├─ input/images/<source image>
-└─ input/sparse/           # COLMAP cameras, image poses, and points
+└─ input/scene_data/
+   ├─ points.ply           # Blender-importable colored point cloud
+   ├─ depth.npy            # Raw inferred depth values
+   ├─ depth_preview.png    # Human-readable depth preview
+   └─ cameras.json         # VGGT camera matrices and input metadata
 ```
 
-`demo_colmap.py` is intentionally used rather than reimplementing VGGT model calls. This keeps the service aligned with the upstream model's supported input/output format.
+The service uses VGGT's public model, camera, depth, and unprojection APIs, but writes its own output contract so the Windows-only PyCOLMAP wheel is not in the runtime path.
 
 ## Notes
 

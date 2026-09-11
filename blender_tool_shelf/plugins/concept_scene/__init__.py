@@ -23,7 +23,7 @@ def _request_json(url: str, payload: dict[str, object] | None = None) -> dict[st
 
 
 def _point_cloud_path(scene: bpy.types.Scene) -> Path:
-    return Path(scene.bts_vggt_job_directory) / "input" / "sparse" / "points.ply"
+    return Path(scene.bts_vggt_job_directory) / "input" / "scene_data" / "points.ply"
 
 
 class BTS_OT_toggle_concept_scene(bpy.types.Operator):

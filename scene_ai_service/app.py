@@ -1,4 +1,4 @@
-"""Local task service that runs the upstream VGGT COLMAP export demo."""
+"""Local task service that runs VGGT and exports Blender-friendly scene data."""
 
 from __future__ import annotations
 
@@ -57,12 +57,9 @@ def _run_job(job_id: str, source: Path, settings: Settings) -> None:
     command = [
         str(settings.python_executable),
         "-u",
-        str(settings.vggt_repository / "demo_colmap.py"),
-        f"--scene_dir={job_dir / 'input'}",
+        str(Path(__file__).with_name("run_vggt_scene.py")),
+        f"--scene-dir={job_dir / 'input'}",
     ]
-    if job.bundle_adjustment:
-        command.append("--use_ba")
-
     log_path = job_dir / "vggt.log"
     try:
         with log_path.open("w", encoding="utf-8") as log_file:
@@ -74,9 +71,9 @@ def _run_job(job_id: str, source: Path, settings: Settings) -> None:
                 check=True,
                 timeout=settings.job_timeout_seconds,
             )
-        output_dir = job_dir / "input" / "sparse"
+        output_dir = job_dir / "input" / "scene_data"
         if not output_dir.exists():
-            raise RuntimeError("VGGT finished without creating a COLMAP sparse output directory")
+            raise RuntimeError("VGGT finished without creating the scene_data output directory")
         job.status = "succeeded"
     except Exception as exc:
         job.status = "failed"
