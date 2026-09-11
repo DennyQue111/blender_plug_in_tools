@@ -73,3 +73,5 @@ ENABLED_PLUGINS = (
 ## AI 场景服务（开发中）
 
 scene_ai_service 是与 Blender 隔离的本地 VGGT 服务。它将概念图或参考图交给独立 Python 环境中的 VGGT，输出 COLMAP 相机与点云数据；未来 Shelf 再负责提交任务和导入结果。这样不会把 PyTorch、CUDA 与模型权重装进 Blender 自带 Python。具体安装、启动和测试方法见 [scene_ai_service/README.md](scene_ai_service/README.md)。
+
+启动服务后，在 `N` 面板的 **Tool Shelf > Modeling > Concept Scene** 中选择图片，点击 **Generate VGGT Scene Data**，再用 **Check VGGT Job** 查看状态。第一版只提交任务，不会自动将结果导回 Blender。

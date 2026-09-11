@@ -10,6 +10,7 @@ from __future__ import annotations
 ENABLED_PLUGINS = (
     "hello_tool",
     "retopo_helper",
+    "concept_scene",
 )
 
 

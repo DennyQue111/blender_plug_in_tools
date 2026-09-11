@@ -58,6 +58,16 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
         layout = self.layout
         layout.operator("bts.hello_tool", text="Hello Tool", icon="SOLO_ON")
         layout.operator("bts.start_retopo_helper", text="Retopo Helper", icon="MESH_DATA")
+        layout.separator()
+        layout.label(text="Concept Scene", icon="IMAGE_DATA")
+        layout.prop(context.scene, "bts_concept_image_path", text="Image")
+        layout.operator("bts.pick_concept_image", icon="FILE_FOLDER")
+        layout.prop(context.scene, "bts_vggt_service_url", text="Service")
+        layout.prop(context.scene, "bts_vggt_bundle_adjustment", text="Bundle Adjustment")
+        layout.operator("bts.submit_vggt_job", icon="PLAY")
+        row = layout.row(align=True)
+        row.operator("bts.check_vggt_job", icon="FILE_REFRESH")
+        row.label(text=context.scene.bts_vggt_job_status)
 
 
 class VIEW3D_PT_tool_shelf_rigging(bpy.types.Panel):
