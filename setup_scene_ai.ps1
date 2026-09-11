@@ -30,8 +30,8 @@ if (-not (Test-Path (Join-Path $vggtRepo ".git"))) {
 
 Write-Host "Installing pinned scene-AI dependencies..."
 & $pythonExe -m pip install --upgrade pip
-& $pythonExe -m pip install --index-url "https://download.pytorch.org/whl/$TorchCuda" --extra-index-url "https://pypi.org/simple" -c $constraints torch==2.3.1 torchvision==0.18.1
 & $pythonExe -m pip install -r (Join-Path $vggtRepo "requirements.txt") -r (Join-Path $projectRoot "scene_ai_service\requirements.txt") -c $constraints
+& $pythonExe -m pip install --force-reinstall --no-deps --index-url "https://download.pytorch.org/whl/$TorchCuda" "torch==2.3.1+$TorchCuda" "torchvision==0.18.1+$TorchCuda"
 
 Write-Host "Verifying Python, NumPy and CUDA..."
 & $pythonExe -c "import numpy, torch; print('NumPy:', numpy.__version__); print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'not detected')"
