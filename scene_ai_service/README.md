@@ -73,6 +73,11 @@ Use **Create VGGT Camera** before starting procedural blockout work. It recreate
 inferred view as Blender's active camera, so generated walls, floors, and proxy objects can be
 checked directly against the source-view Depth Mesh.
 
+**Create Floor Proxy** fits a plane to reliable depth samples in the bottom portion of the image,
+then creates a separate editable floor mesh. It works best when the input visibly contains a broad,
+non-reflective floor; use its controls to widen/narrow the sampled image portion or relax the fit
+tolerance when necessary.
+
 ## Notes
 
 - A single concept image yields an inferred, image-facing scene proxy, not a fully known 3D world. Multiple related views are more reliable.

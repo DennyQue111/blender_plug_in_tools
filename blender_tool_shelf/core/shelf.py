@@ -87,6 +87,13 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
                 box.prop(context.scene, "bts_vggt_depth_mesh_confidence")
                 box.prop(context.scene, "bts_vggt_depth_mesh_discontinuity")
                 box.operator("bts.create_vggt_depth_mesh", icon="MOD_TRIANGULATE")
+                box.separator()
+                box.label(text="Procedural Blockout", icon="MESH_PLANE")
+                box.prop(context.scene, "bts_vggt_floor_image_portion")
+                box.prop(context.scene, "bts_vggt_floor_confidence")
+                box.prop(context.scene, "bts_vggt_floor_fit_tolerance")
+                box.prop(context.scene, "bts_vggt_floor_padding")
+                box.operator("bts.create_vggt_floor_proxy", icon="MESH_PLANE")
 
 
 class VIEW3D_PT_tool_shelf_rigging(bpy.types.Panel):

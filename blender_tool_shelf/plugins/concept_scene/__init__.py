@@ -219,6 +219,107 @@ class BTS_OT_create_vggt_camera(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class BTS_OT_create_vggt_floor_proxy(bpy.types.Operator):
+    bl_idname = "bts.create_vggt_floor_proxy"
+    bl_label = "Create Floor Proxy"
+    bl_description = "Fit an editable floor plane to reliable depth samples near the bottom of the image"
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        depth_path, confidence_path, cameras_path, _image_directory = _depth_mesh_paths(context.scene)
+        return depth_path.is_file() and confidence_path.is_file() and cameras_path.is_file()
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        try:
+            import numpy as np
+            scene = context.scene
+            depth_path, confidence_path, cameras_path, _image_directory = _depth_mesh_paths(scene)
+            depth = np.squeeze(np.load(depth_path))
+            confidence = np.squeeze(np.load(confidence_path))
+            camera_data = json.loads(cameras_path.read_text(encoding="utf-8"))
+            intrinsics = np.asarray(camera_data["intrinsics"][0], dtype=np.float64)
+            extrinsics = np.asarray(camera_data["extrinsics_world_to_camera"][0], dtype=np.float64)
+        except (ImportError, OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+            self.report({"ERROR"}, f"Could not read VGGT depth data: {exc}")
+            return {"CANCELLED"}
+        if depth.ndim != 2 or confidence.shape != depth.shape or intrinsics.shape != (3, 3):
+            self.report({"ERROR"}, "VGGT depth, confidence, or camera data has an unsupported shape")
+            return {"CANCELLED"}
+
+        height, width = depth.shape
+        y_start = int(height * (1.0 - scene.bts_vggt_floor_image_portion))
+        inverse_intrinsics = np.linalg.inv(intrinsics)
+        rotation = extrinsics[:3, :3]
+        translation = extrinsics[:3, 3]
+        samples: list[object] = []
+        for y in range(y_start, height, 6):
+            for x in range(0, width, 6):
+                if not (np.isfinite(depth[y, x]) and np.isfinite(confidence[y, x])):
+                    continue
+                if depth[y, x] <= 0 or confidence[y, x] < scene.bts_vggt_floor_confidence:
+                    continue
+                camera_point = inverse_intrinsics @ np.array((x, y, 1.0)) * depth[y, x]
+                samples.append(rotation.T @ (camera_point - translation))
+        if len(samples) < 30:
+            self.report({"ERROR"}, "Too few reliable bottom-image depth samples to fit a floor")
+            return {"CANCELLED"}
+
+        points = np.asarray(samples)
+        if len(points) > 2_000:
+            points = points[np.linspace(0, len(points) - 1, 2_000, dtype=np.int32)]
+        tolerance = scene.bts_vggt_floor_fit_tolerance * max(float(np.median(depth)), 1e-6)
+        generator = np.random.default_rng(42)
+        best_mask = None
+        for _ in range(160):
+            a, b, c = points[generator.choice(len(points), size=3, replace=False)]
+            normal = np.cross(b - a, c - a)
+            normal_length = np.linalg.norm(normal)
+            if normal_length < 1e-8:
+                continue
+            normal /= normal_length
+            mask = np.abs((points - a) @ normal) <= tolerance
+            if best_mask is None or mask.sum() > best_mask.sum():
+                best_mask = mask
+        if best_mask is None or best_mask.sum() < 20:
+            self.report({"ERROR"}, "Could not identify a dominant floor plane; adjust Floor Fit Tolerance")
+            return {"CANCELLED"}
+
+        inliers = points[best_mask]
+        center = inliers.mean(axis=0)
+        _unused, _singular_values, vectors = np.linalg.svd(inliers - center, full_matrices=False)
+        normal = vectors[-1]
+        axis_u = vectors[0]
+        axis_v = np.cross(normal, axis_u)
+        axis_v /= np.linalg.norm(axis_v)
+        projected_u = (inliers - center) @ axis_u
+        projected_v = (inliers - center) @ axis_v
+        padding = scene.bts_vggt_floor_padding
+        u_min, u_max = projected_u.min(), projected_u.max()
+        v_min, v_max = projected_v.min(), projected_v.max()
+        u_padding = (u_max - u_min) * padding
+        v_padding = (v_max - v_min) * padding
+        corners = (
+            center + axis_u * (u_min - u_padding) + axis_v * (v_min - v_padding),
+            center + axis_u * (u_max + u_padding) + axis_v * (v_min - v_padding),
+            center + axis_u * (u_max + u_padding) + axis_v * (v_max + v_padding),
+            center + axis_u * (u_min - u_padding) + axis_v * (v_max + v_padding),
+        )
+        mesh = bpy.data.meshes.new("VGGT_FloorProxy")
+        mesh.from_pydata([tuple(float(value) for value in point) for point in corners], [], [(0, 1, 2, 3)])
+        mesh.update()
+        floor = bpy.data.objects.new("VGGT_FloorProxy", mesh)
+        context.collection.objects.link(floor)
+        material = bpy.data.materials.new("VGGT_FloorProxy_Material")
+        material.diffuse_color = (0.12, 0.55, 0.18, 1.0)
+        mesh.materials.append(material)
+        for object_to_deselect in context.selected_objects:
+            object_to_deselect.select_set(False)
+        floor.select_set(True)
+        context.view_layer.objects.active = floor
+        self.report({"INFO"}, f"Created floor proxy from {len(inliers):,} fitted depth samples")
+        return {"FINISHED"}
+
+
 class BTS_OT_create_vggt_depth_mesh(bpy.types.Operator):
     bl_idname = "bts.create_vggt_depth_mesh"
     bl_label = "Create VGGT Depth Mesh"
@@ -350,6 +451,7 @@ CLASSES = (
     BTS_OT_check_vggt_job,
     BTS_OT_import_vggt_point_cloud,
     BTS_OT_create_vggt_camera,
+    BTS_OT_create_vggt_floor_proxy,
     BTS_OT_create_vggt_depth_mesh,
 )
 
@@ -396,6 +498,10 @@ def register() -> None:
         min=0.001,
         max=1.0,
     )
+    bpy.types.Scene.bts_vggt_floor_image_portion = FloatProperty(name="Floor Image Portion", default=0.35, min=0.1, max=0.9)
+    bpy.types.Scene.bts_vggt_floor_confidence = FloatProperty(name="Floor Min Confidence", default=1.0, min=0.0, max=100.0)
+    bpy.types.Scene.bts_vggt_floor_fit_tolerance = FloatProperty(name="Floor Fit Tolerance", default=0.03, min=0.001, max=0.5)
+    bpy.types.Scene.bts_vggt_floor_padding = FloatProperty(name="Floor Padding", default=0.1, min=0.0, max=1.0)
 
 
 def unregister() -> None:
@@ -406,6 +512,10 @@ def unregister() -> None:
         "bts_vggt_depth_mesh_discontinuity",
         "bts_vggt_depth_mesh_confidence",
         "bts_vggt_depth_mesh_stride",
+        "bts_vggt_floor_padding",
+        "bts_vggt_floor_fit_tolerance",
+        "bts_vggt_floor_confidence",
+        "bts_vggt_floor_image_portion",
         "bts_vggt_status_path",
         "bts_vggt_job_id",
         "bts_vggt_bundle_adjustment",
