@@ -75,6 +75,12 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
                     box.label(text=line[:88])
             if context.scene.bts_vggt_job_status == "succeeded":
                 box.operator("bts.import_vggt_point_cloud", icon="MESH_DATA")
+                box.separator()
+                box.label(text="Depth Mesh (2.5D)", icon="MOD_TRIANGULATE")
+                box.prop(context.scene, "bts_vggt_depth_mesh_stride")
+                box.prop(context.scene, "bts_vggt_depth_mesh_confidence")
+                box.prop(context.scene, "bts_vggt_depth_mesh_discontinuity")
+                box.operator("bts.create_vggt_depth_mesh", icon="MOD_TRIANGULATE")
 
 
 class VIEW3D_PT_tool_shelf_rigging(bpy.types.Panel):

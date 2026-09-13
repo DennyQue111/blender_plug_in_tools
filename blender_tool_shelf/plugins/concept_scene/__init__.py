@@ -8,7 +8,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import bpy
-from bpy.props import BoolProperty, StringProperty
+from bpy.props import BoolProperty, FloatProperty, IntProperty, StringProperty
+
+import numpy as np
 
 
 def _service_url(scene: bpy.types.Scene, path: str) -> str:
@@ -24,6 +26,17 @@ def _request_json(url: str, payload: dict[str, object] | None = None) -> dict[st
 
 def _point_cloud_path(scene: bpy.types.Scene) -> Path:
     return Path(scene.bts_vggt_job_directory) / "input" / "scene_data" / "points.ply"
+
+
+def _depth_mesh_paths(scene: bpy.types.Scene) -> tuple[Path, Path, Path, Path]:
+    job_directory = Path(scene.bts_vggt_job_directory)
+    data_directory = job_directory / "input" / "scene_data"
+    return (
+        data_directory / "depth.npy",
+        data_directory / "confidence.npy",
+        data_directory / "cameras.json",
+        job_directory / "input" / "images",
+    )
 
 
 class BTS_OT_toggle_concept_scene(bpy.types.Operator):
@@ -137,11 +150,137 @@ class BTS_OT_import_vggt_point_cloud(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class BTS_OT_create_vggt_depth_mesh(bpy.types.Operator):
+    bl_idname = "bts.create_vggt_depth_mesh"
+    bl_label = "Create VGGT Depth Mesh"
+    bl_description = "Create a textured 2.5D mesh from the current VGGT depth prediction"
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        depth_path, confidence_path, cameras_path, image_directory = _depth_mesh_paths(context.scene)
+        return all((depth_path.is_file(), confidence_path.is_file(), cameras_path.is_file(), image_directory.is_dir()))
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        scene = context.scene
+        depth_path, confidence_path, cameras_path, image_directory = _depth_mesh_paths(scene)
+        try:
+            depth = np.load(depth_path)
+            confidence = np.load(confidence_path)
+            camera_data = json.loads(cameras_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            self.report({"ERROR"}, f"Could not read VGGT scene data: {exc}")
+            return {"CANCELLED"}
+
+        # Saved arrays have shape [frame, channel, height, width] for the current VGGT version.
+        while depth.ndim > 2:
+            depth = depth[0]
+        while confidence.ndim > 2:
+            confidence = confidence[0]
+        if depth.ndim != 2 or confidence.shape != depth.shape:
+            self.report({"ERROR"}, "VGGT depth and confidence arrays have incompatible shapes")
+            return {"CANCELLED"}
+
+        try:
+            intrinsics = np.asarray(camera_data["intrinsics"][0], dtype=np.float64)
+            extrinsics = np.asarray(camera_data["extrinsics_world_to_camera"][0], dtype=np.float64)
+            image_name = str(camera_data["images"][0])
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            self.report({"ERROR"}, f"VGGT camera data is incomplete: {exc}")
+            return {"CANCELLED"}
+        if intrinsics.shape != (3, 3) or extrinsics.shape[0] < 3 or extrinsics.shape[1] < 4:
+            self.report({"ERROR"}, "VGGT camera matrices have an unsupported shape")
+            return {"CANCELLED"}
+
+        height, width = depth.shape
+        stride = scene.bts_vggt_depth_mesh_stride
+        x_coordinates = list(range(0, width, stride))
+        y_coordinates = list(range(0, height, stride))
+        if x_coordinates[-1] != width - 1:
+            x_coordinates.append(width - 1)
+        if y_coordinates[-1] != height - 1:
+            y_coordinates.append(height - 1)
+
+        inverse_intrinsics = np.linalg.inv(intrinsics)
+        rotation = extrinsics[:3, :3]
+        translation = extrinsics[:3, 3]
+        vertices: list[tuple[float, float, float]] = []
+        uvs: list[tuple[float, float]] = []
+        vertex_indices: dict[tuple[int, int], int] = {}
+        valid = np.isfinite(depth) & np.isfinite(confidence) & (depth > 0)
+        valid &= confidence >= scene.bts_vggt_depth_mesh_confidence
+
+        for y in y_coordinates:
+            for x in x_coordinates:
+                if not valid[y, x]:
+                    continue
+                camera_point = inverse_intrinsics @ np.array((x, y, 1.0)) * depth[y, x]
+                # Keep VGGT's world axes unchanged so this mesh aligns with its imported PLY.
+                world_point = rotation.T @ (camera_point - translation)
+                vertex_indices[(y, x)] = len(vertices)
+                vertices.append(tuple(float(value) for value in world_point))
+                uvs.append(((x + 0.5) / width, 1.0 - (y + 0.5) / height))
+
+        faces: list[tuple[int, int, int]] = []
+        depth_limit = scene.bts_vggt_depth_mesh_discontinuity
+        for y_index in range(len(y_coordinates) - 1):
+            for x_index in range(len(x_coordinates) - 1):
+                y0, y1 = y_coordinates[y_index], y_coordinates[y_index + 1]
+                x0, x1 = x_coordinates[x_index], x_coordinates[x_index + 1]
+                keys = ((y0, x0), (y0, x1), (y1, x1), (y1, x0))
+                if not all(key in vertex_indices for key in keys):
+                    continue
+                cell_depth = np.array((depth[y0, x0], depth[y0, x1], depth[y1, x1], depth[y1, x0]))
+                if cell_depth.max() - cell_depth.min() > depth_limit * max(cell_depth.min(), 1e-6):
+                    continue
+                a, b, c, d = (vertex_indices[key] for key in keys)
+                faces.extend(((a, b, c), (a, c, d)))
+
+        if not faces:
+            self.report({"ERROR"}, "No mesh faces survived the depth/confidence filters")
+            return {"CANCELLED"}
+
+        mesh = bpy.data.meshes.new("VGGT_DepthMesh")
+        mesh.from_pydata(vertices, [], faces)
+        mesh.update()
+        uv_layer = mesh.uv_layers.new(name="UVMap")
+        for polygon in mesh.polygons:
+            for loop_index in polygon.loop_indices:
+                uv_layer.data[loop_index].uv = uvs[mesh.loops[loop_index].vertex_index]
+
+        mesh_object = bpy.data.objects.new("VGGT_DepthMesh", mesh)
+        context.collection.objects.link(mesh_object)
+        for object_to_deselect in context.selected_objects:
+            object_to_deselect.select_set(False)
+        mesh_object.select_set(True)
+        context.view_layer.objects.active = mesh_object
+
+        image_path = image_directory / image_name
+        if image_path.is_file():
+            image = bpy.data.images.load(str(image_path), check_existing=True)
+            material = bpy.data.materials.new("VGGT_DepthMesh_Material")
+            material.use_nodes = True
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+            texture = nodes.new("ShaderNodeTexImage")
+            texture.image = image
+            principled = nodes.get("Principled BSDF")
+            if principled is not None:
+                links.new(texture.outputs["Color"], principled.inputs["Base Color"])
+                links.new(texture.outputs["Alpha"], principled.inputs["Alpha"])
+            mesh.materials.append(material)
+        else:
+            self.report({"WARNING"}, f"Depth mesh created, but source image is missing: {image_name}")
+
+        self.report({"INFO"}, f"Created VGGT depth mesh: {len(vertices):,} vertices, {len(faces):,} faces")
+        return {"FINISHED"}
+
+
 CLASSES = (
     BTS_OT_toggle_concept_scene,
     BTS_OT_submit_vggt_job,
     BTS_OT_check_vggt_job,
     BTS_OT_import_vggt_point_cloud,
+    BTS_OT_create_vggt_depth_mesh,
 )
 
 
@@ -157,6 +296,27 @@ def register() -> None:
     bpy.types.Scene.bts_vggt_job_directory = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_log_tail = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_job_status = StringProperty(default="Service not contacted")
+    bpy.types.Scene.bts_vggt_depth_mesh_stride = IntProperty(
+        name="Mesh Resolution",
+        description="Use every nth depth pixel; lower values create denser meshes",
+        default=4,
+        min=1,
+        max=64,
+    )
+    bpy.types.Scene.bts_vggt_depth_mesh_confidence = FloatProperty(
+        name="Min Confidence",
+        description="Remove depth samples below this VGGT confidence",
+        default=1.2,
+        min=0.0,
+        max=100.0,
+    )
+    bpy.types.Scene.bts_vggt_depth_mesh_discontinuity = FloatProperty(
+        name="Depth Edge",
+        description="Do not connect a face across a relative depth jump larger than this value",
+        default=0.08,
+        min=0.001,
+        max=1.0,
+    )
 
 
 def unregister() -> None:
@@ -164,6 +324,9 @@ def unregister() -> None:
         "bts_vggt_job_status",
         "bts_vggt_job_directory",
         "bts_vggt_log_tail",
+        "bts_vggt_depth_mesh_discontinuity",
+        "bts_vggt_depth_mesh_confidence",
+        "bts_vggt_depth_mesh_stride",
         "bts_vggt_status_path",
         "bts_vggt_job_id",
         "bts_vggt_bundle_adjustment",
