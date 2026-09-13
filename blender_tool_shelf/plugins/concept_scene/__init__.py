@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import bpy
-from bpy.props import BoolProperty, FloatProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 import numpy as np
 
@@ -26,6 +26,21 @@ def _request_json(url: str, payload: dict[str, object] | None = None) -> dict[st
 
 def _point_cloud_path(scene: bpy.types.Scene) -> Path:
     return Path(scene.bts_vggt_job_directory) / "input" / "scene_data" / "points.ply"
+
+
+def _source_images(scene: bpy.types.Scene) -> list[Path]:
+    if scene.bts_concept_input_mode == "SINGLE":
+        image_path = Path(scene.bts_concept_image_path).expanduser()
+        return [image_path] if image_path.is_file() else []
+
+    image_directory = Path(scene.bts_concept_image_directory).expanduser()
+    supported_suffixes = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+    if not image_directory.is_dir():
+        return []
+    return sorted(
+        (path for path in image_directory.iterdir() if path.suffix.lower() in supported_suffixes),
+        key=lambda path: path.name.casefold(),
+    )
 
 
 def _depth_mesh_paths(scene: bpy.types.Scene) -> tuple[Path, Path, Path, Path]:
@@ -57,20 +72,23 @@ class BTS_OT_submit_vggt_job(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
-        return bool(context.scene.bts_concept_image_path)
+        return bool(_source_images(context.scene))
 
     def execute(self, context: bpy.types.Context) -> set[str]:
         scene = context.scene
-        image_path = Path(scene.bts_concept_image_path).expanduser()
-        if not image_path.is_file():
-            self.report({"ERROR"}, "Choose an existing concept image first")
+        image_paths = _source_images(scene)
+        if not image_paths:
+            self.report({"ERROR"}, "Choose an existing image or a folder containing supported images")
+            return {"CANCELLED"}
+        if scene.bts_concept_input_mode == "FOLDER" and len(image_paths) < 2:
+            self.report({"ERROR"}, "Choose a folder containing at least two scene views")
             return {"CANCELLED"}
 
         try:
             result = _request_json(
                 _service_url(scene, "/jobs"),
                 {
-                    "image_path": str(image_path.resolve()),
+                    "image_paths": [str(image_path.resolve()) for image_path in image_paths],
                     "bundle_adjustment": scene.bts_vggt_bundle_adjustment,
                 },
             )
@@ -89,7 +107,7 @@ class BTS_OT_submit_vggt_job(bpy.types.Operator):
         scene.bts_vggt_status_path = status_url
         scene.bts_vggt_job_directory = ""
         scene.bts_vggt_job_status = "Queued"
-        self.report({"INFO"}, f"VGGT job {job_id[:8]} queued")
+        self.report({"INFO"}, f"VGGT job {job_id[:8]} queued with {len(image_paths)} image(s)")
         return {"FINISHED"}
 
 
@@ -288,7 +306,16 @@ def register() -> None:
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.Scene.bts_concept_scene_expanded = BoolProperty(default=False)
+    bpy.types.Scene.bts_concept_input_mode = EnumProperty(
+        name="Input",
+        items=(
+            ("SINGLE", "Single Image", "Generate a 2.5D proxy from one reference image"),
+            ("FOLDER", "Image Folder", "Jointly reconstruct a scene from all supported images in a folder"),
+        ),
+        default="SINGLE",
+    )
     bpy.types.Scene.bts_concept_image_path = StringProperty(subtype="FILE_PATH")
+    bpy.types.Scene.bts_concept_image_directory = StringProperty(subtype="DIR_PATH")
     bpy.types.Scene.bts_vggt_service_url = StringProperty(default="http://127.0.0.1:8765")
     bpy.types.Scene.bts_vggt_bundle_adjustment = BoolProperty(default=False)
     bpy.types.Scene.bts_vggt_job_id = StringProperty(options={"HIDDEN"})
@@ -331,7 +358,9 @@ def unregister() -> None:
         "bts_vggt_job_id",
         "bts_vggt_bundle_adjustment",
         "bts_vggt_service_url",
+        "bts_concept_image_directory",
         "bts_concept_image_path",
+        "bts_concept_input_mode",
         "bts_concept_scene_expanded",
     ):
         delattr(bpy.types.Scene, name)

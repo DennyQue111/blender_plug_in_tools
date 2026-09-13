@@ -2,7 +2,9 @@
 
 This is deliberately separate from the Blender extension. Blender's bundled Python stays clean; VGGT, PyTorch, CUDA and the model weights live in their own virtual environment.
 
-The first version is a small local HTTP service. It accepts an absolute image path, copies the image into a per-job working directory, then runs VGGT directly. It writes a Blender-friendly point cloud, depth data, and camera JSON without requiring PyCOLMAP.
+The first version is a small local HTTP service. It accepts one image or a list of images from the
+same scene, copies them into a per-job working directory, then runs VGGT jointly. It writes a
+Blender-friendly point cloud, depth data, and camera JSON without requiring PyCOLMAP.
 
 ## 1. Install VGGT in an external environment
 
@@ -45,7 +47,7 @@ If VGGT is in another directory or port `8765` is occupied:
 ## 3. Submit a job
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/jobs -ContentType application/json -Body '{"image_path":"E:\\images\\concept.png","bundle_adjustment":false}'
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/jobs -ContentType application/json -Body '{"image_paths":["E:\\images\\scene\\000.png","E:\\images\\scene\\045.png"],"bundle_adjustment":false}'
 ```
 
 Check the returned `status_url`. On success, the job directory contains:
@@ -70,5 +72,6 @@ reference/proxy for further procedural modeling rather than a closed reconstruct
 ## Notes
 
 - A single concept image yields an inferred, image-facing scene proxy, not a fully known 3D world. Multiple related views are more reliable.
+- For multi-view input, use only images of the same static scene and ensure adjacent images overlap substantially. VGGT uses image content rather than filenames to infer the geometric relationships; filenames are sorted only to make jobs reproducible and easier to inspect.
 - `bundle_adjustment` is useful for multiple views. It is normally unnecessary for one image.
 - The source image is copied, never modified.

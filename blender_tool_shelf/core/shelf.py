@@ -62,7 +62,12 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
         layout.operator("bts.toggle_concept_scene", text="Concept Scene", icon="IMAGE_DATA")
         if context.scene.bts_concept_scene_expanded:
             box = layout.box()
-            box.prop(context.scene, "bts_concept_image_path", text="Image")
+            box.prop(context.scene, "bts_concept_input_mode")
+            if context.scene.bts_concept_input_mode == "SINGLE":
+                box.prop(context.scene, "bts_concept_image_path", text="Image")
+            else:
+                box.prop(context.scene, "bts_concept_image_directory", text="Image Folder")
+                box.label(text="All supported images are used in filename order", icon="INFO")
             box.prop(context.scene, "bts_vggt_service_url", text="Service")
             box.prop(context.scene, "bts_vggt_bundle_adjustment", text="Bundle Adjustment")
             box.operator("bts.submit_vggt_job", icon="PLAY")

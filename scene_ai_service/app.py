@@ -22,7 +22,7 @@ JOBS: dict[str, "Job"] = {}
 
 
 class CreateJobRequest(BaseModel):
-    image_path: Path = Field(description="Absolute path to a concept/reference image")
+    image_paths: list[Path] = Field(min_length=1, description="Absolute paths to one scene's reference images")
     bundle_adjustment: bool = Field(default=False)
 
 
@@ -46,13 +46,19 @@ def _read_log_tail(job: Job, line_count: int = 12) -> str:
         return f"Could not read log: {exc}"
 
 
-def _run_job(job_id: str, source: Path, settings: Settings) -> None:
+def _run_job(job_id: str, sources: list[Path], settings: Settings) -> None:
     job = JOBS[job_id]
     job.status = "running"
     job_dir = Path(job.directory)
     image_dir = job_dir / "input" / "images"
     image_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, image_dir / source.name)
+    used_names: set[str] = set()
+    for index, source in enumerate(sources):
+        destination_name = source.name
+        if destination_name.casefold() in used_names:
+            destination_name = f"{index:03d}_{destination_name}"
+        used_names.add(destination_name.casefold())
+        shutil.copy2(source, image_dir / destination_name)
 
     command = [
         str(settings.python_executable),
@@ -87,9 +93,9 @@ def health() -> dict[str, str]:
 
 @app.post("/jobs", status_code=202)
 def create_job(request: CreateJobRequest) -> dict[str, str]:
-    source = request.image_path.expanduser().resolve()
-    if not source.is_file():
-        raise HTTPException(status_code=400, detail="image_path must be an existing file")
+    sources = [image_path.expanduser().resolve() for image_path in request.image_paths]
+    if any(not source.is_file() for source in sources):
+        raise HTTPException(status_code=400, detail="Every image_paths entry must be an existing file")
 
     job_id = uuid.uuid4().hex
     job_dir = SETTINGS.workspace / "jobs" / job_id
@@ -100,7 +106,7 @@ def create_job(request: CreateJobRequest) -> dict[str, str]:
         directory=str(job_dir),
         bundle_adjustment=request.bundle_adjustment,
     )
-    thread = threading.Thread(target=_run_job, args=(job_id, source, SETTINGS), daemon=True)
+    thread = threading.Thread(target=_run_job, args=(job_id, sources, SETTINGS), daemon=True)
     thread.start()
     return {"job_id": job_id, "status_url": f"/jobs/{job_id}"}
 
