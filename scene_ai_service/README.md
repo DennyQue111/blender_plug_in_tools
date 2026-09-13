@@ -69,6 +69,10 @@ Mesh**. The latter reads the saved depth, confidence, camera data, and source im
 textured 2.5D mesh. It deliberately cuts faces across large depth discontinuities, so it is a
 reference/proxy for further procedural modeling rather than a closed reconstruction.
 
+Use **Create VGGT Camera** before starting procedural blockout work. It recreates the first
+inferred view as Blender's active camera, so generated walls, floors, and proxy objects can be
+checked directly against the source-view Depth Mesh.
+
 ## Notes
 
 - A single concept image yields an inferred, image-facing scene proxy, not a fully known 3D world. Multiple related views are more reliable.

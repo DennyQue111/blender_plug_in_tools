@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import bpy
+from mathutils import Matrix
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 
 import numpy as np
@@ -168,6 +169,56 @@ class BTS_OT_import_vggt_point_cloud(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class BTS_OT_create_vggt_camera(bpy.types.Operator):
+    bl_idname = "bts.create_vggt_camera"
+    bl_label = "Create VGGT Camera"
+    bl_description = "Create a Blender camera matching VGGT's first input view"
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        _depth_path, _confidence_path, cameras_path, _image_directory = _depth_mesh_paths(context.scene)
+        return cameras_path.is_file()
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        try:
+            import numpy as np
+            camera_data = json.loads(_depth_mesh_paths(context.scene)[2].read_text(encoding="utf-8"))
+            intrinsics = np.asarray(camera_data["intrinsics"][0], dtype=np.float64)
+            extrinsics = np.asarray(camera_data["extrinsics_world_to_camera"][0], dtype=np.float64)
+            resolution = camera_data["inference_resolution"]
+        except (ImportError, OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+            self.report({"ERROR"}, f"Could not read VGGT camera data: {exc}")
+            return {"CANCELLED"}
+        if intrinsics.shape != (3, 3) or extrinsics.shape[0] < 3 or extrinsics.shape[1] < 4:
+            self.report({"ERROR"}, "VGGT camera matrices have an unsupported shape")
+            return {"CANCELLED"}
+
+        rotation_world_from_camera = extrinsics[:3, :3].T
+        location = -rotation_world_from_camera @ extrinsics[:3, 3]
+        # VGGT uses OpenCV camera axes (right, down, forward); Blender cameras use
+        # (right, up, backward). Keep the scene in VGGT axes to align with the PLY/depth mesh.
+        blender_camera_axes = np.diag((1.0, -1.0, -1.0))
+        rotation = rotation_world_from_camera @ blender_camera_axes
+        matrix = Matrix.Identity(4)
+        for row in range(3):
+            for column in range(3):
+                matrix[row][column] = float(rotation[row, column])
+            matrix[row][3] = float(location[row])
+
+        camera_data_block = bpy.data.cameras.new("VGGT_Camera")
+        image_width = int(resolution[1])
+        camera_data_block.sensor_width = 36.0
+        camera_data_block.lens = float(intrinsics[0, 0]) / image_width * camera_data_block.sensor_width
+        camera_object = bpy.data.objects.new("VGGT_Camera", camera_data_block)
+        context.collection.objects.link(camera_object)
+        camera_object.matrix_world = matrix
+        context.scene.camera = camera_object
+        context.scene.render.resolution_x = image_width
+        context.scene.render.resolution_y = int(resolution[0])
+        self.report({"INFO"}, "Created and activated VGGT camera")
+        return {"FINISHED"}
+
+
 class BTS_OT_create_vggt_depth_mesh(bpy.types.Operator):
     bl_idname = "bts.create_vggt_depth_mesh"
     bl_label = "Create VGGT Depth Mesh"
@@ -298,6 +349,7 @@ CLASSES = (
     BTS_OT_submit_vggt_job,
     BTS_OT_check_vggt_job,
     BTS_OT_import_vggt_point_cloud,
+    BTS_OT_create_vggt_camera,
     BTS_OT_create_vggt_depth_mesh,
 )
 
