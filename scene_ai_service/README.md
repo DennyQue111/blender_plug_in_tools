@@ -18,7 +18,15 @@ python -m pip install -r .\vendor\vggt\requirements.txt
 python -m pip install -r .\scene_ai_service\requirements.txt
 ```
 
-The first inference downloads the VGGT weights. Do not create this environment inside `blender_tool_shelf`; Blender must not import it.
+The first inference downloads the VGGT weights (about 4.7 GB). The service stores an incomplete
+download as `scene_ai_service/model_cache/VGGT-1B/model.pt.part` and keeps retrying HTTP Range
+requests until it completes; only a complete file is renamed to `model.pt`. It also migrates an
+older interrupted Torch cache on its first run. Do not create this environment inside
+`blender_tool_shelf`; Blender must not import it.
+
+For RTX 50-series GPUs, run the setup script with its default `cu128` option. It installs PyTorch
+2.7 plus its matching CUDA 12.8 runtime wheels, which support the RTX 50-series `sm_120`
+architecture. The older `cu121` option is retained only for older GPUs.
 
 ## 2. Start the service
 

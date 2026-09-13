@@ -44,7 +44,56 @@ blender_plug_in_tools/
 
 ### 开发模式：映射源码目录
 
-开发时不建议反复安装 zip。可以把源码目录通过 Windows Junction 映射到 Blender 5.2 的本地 Extension 仓库。映射后，Blender 读取的就是源码目录，不需要重新压缩。
+开发时不建议反复安装 zip。可以把源码目录通过 Windows Junction 映射到 Blender 5.0 的本地 Extension 仓库。映射后，Blender 读取的就是源码目录，不需要重新压缩。
+
+Blender 5.0 在 Windows 上的默认用户目录是：
+
+```text
+C:\Users\<用户名>\AppData\Roaming\Blender Foundation\Blender\5.0
+```
+
+其中 `extensions` 是 Extension **仓库的容器**，通常还会有一层默认仓库目录
+`user_default`。本项目的 manifest ID 是 `blender_tool_shelf`，因此默认映射位置通常为：
+
+```text
+C:\Users\<用户名>\AppData\Roaming\Blender Foundation\Blender\5.0\extensions\user_default\blender_tool_shelf
+```
+
+如果在 Blender 的 **Preferences > Extensions > Repositories** 中修改过仓库位置，应该使用界面里显示的实际本地仓库目录，而不是上述默认值。
+
+关闭 Blender，然后在项目根目录打开 PowerShell。先设置并检查路径：
+
+```powershell
+$Source = (Resolve-Path ".\blender_tool_shelf").Path
+$Repo = Join-Path $env:APPDATA "Blender Foundation\Blender\5.0\extensions\user_default"
+$Link = Join-Path $Repo "blender_tool_shelf"
+
+New-Item -ItemType Directory -Force -Path $Repo | Out-Null
+Get-Item -LiteralPath $Source
+if (Test-Path -LiteralPath $Link) {
+    Get-Item -LiteralPath $Link | Format-List FullName,LinkType,Target
+}
+```
+
+如果 `$Link` 已经是之前通过 zip 安装的普通目录，先在 Blender 中卸载该 Extension，或者关闭 Blender 后将该目录改名留作备份：
+
+```powershell
+Rename-Item -LiteralPath $Link -NewName "blender_tool_shelf.backup"
+```
+
+然后创建目录 Junction：
+
+```powershell
+New-Item -ItemType Junction -Path $Link -Target $Source
+Get-Item -LiteralPath $Link | Format-List FullName,LinkType,Target
+```
+
+输出中的 `LinkType` 应为 `Junction`，`Target` 应指向本仓库里的
+`blender_tool_shelf` 源码目录。不要把整个 `blender_plug_in_tools` 仓库映射过去；Blender
+需要在 Extension 根目录直接看到 `__init__.py` 和 `blender_manifest.toml`。
+
+重新启动 Blender，在 **Preferences > Get Extensions / Add-ons** 中启用
+**Blender Tool Shelf**。之后对 Python 文件的修改会直接反映到映射目录中，不必再次安装 zip。
 
 修改或新增代码后，在 Blender Python Console 执行：
 

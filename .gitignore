@@ -51,4 +51,5 @@ desktop.ini
 scene_ai_service/.venv/
 scene_ai_service/vendor/
 scene_ai_service/workspace/
+scene_ai_service/model_cache/
 vendor/vggt/

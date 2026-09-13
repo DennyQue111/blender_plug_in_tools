@@ -13,7 +13,7 @@ class Settings:
     vggt_repository: Path
     python_executable: Path
     workspace: Path
-    job_timeout_seconds: int = 3600
+    job_timeout_seconds: int | None = None
 
 
 def _required_path(name: str) -> Path:

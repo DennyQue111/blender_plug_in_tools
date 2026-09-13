@@ -5,9 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
+import time
 from contextlib import nullcontext
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 import numpy as np
 import torch
@@ -27,8 +30,13 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 
 MODEL_URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+MODEL_FILENAME = "model.pt"
 INFERENCE_SIZE = 518
 MAX_POINT_COUNT = 100_000
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+DOWNLOAD_RETRY_DELAY_SECONDS = 5
+CONFIDENCE_THRESHOLD = 1.2
+MINIMUM_EXPORTED_POINT_COUNT = 1_000
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,12 +65,94 @@ def _save_depth_preview(depth: np.ndarray, destination: Path) -> None:
 
 
 def _sample_points(points: np.ndarray, colors: np.ndarray, confidence: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    mask = np.isfinite(points).all(axis=1) & (confidence >= 5.0)
+    valid = np.isfinite(points).all(axis=1) & np.isfinite(confidence)
+    mask = valid & (confidence > CONFIDENCE_THRESHOLD)
+    if mask.sum() < MINIMUM_EXPORTED_POINT_COUNT and valid.any():
+        # VGGT's own tracking helper uses 1.2 as its low-confidence cutoff.
+        # Single images can still be conservative, so retain the most confident
+        # valid quarter instead of exporting an empty PLY that Blender cannot import.
+        fallback_threshold = np.percentile(confidence[valid], 75)
+        mask = valid & (confidence >= fallback_threshold)
+        print(
+            "Only "
+            f"{int((valid & (confidence > CONFIDENCE_THRESHOLD)).sum()):,} points exceeded "
+            f"the confidence threshold; using the top-confidence fallback at "
+            f"{fallback_threshold:.3f}"
+        )
     points, colors = points[mask], colors[mask]
     if len(points) > MAX_POINT_COUNT:
         indices = np.linspace(0, len(points) - 1, MAX_POINT_COUNT, dtype=np.int64)
         points, colors = points[indices], colors[indices]
     return points, colors
+
+
+def _model_paths() -> tuple[Path, Path, Path]:
+    cache_directory = Path(__file__).with_name("model_cache") / "VGGT-1B"
+    complete_path = cache_directory / MODEL_FILENAME
+    partial_path = cache_directory / f"{MODEL_FILENAME}.part"
+    legacy_path = Path(torch.hub.get_dir()) / "checkpoints" / MODEL_FILENAME
+    return complete_path, partial_path, legacy_path
+
+
+def _download_model_weights() -> Path:
+    """Download model weights with HTTP Range support and atomic completion.
+
+    A previous torch.hub attempt saves an interrupted download as ``model.pt``.
+    Move that file into this downloader's ``.part`` location so its valid prefix
+    can be retained rather than downloading it again from byte zero.
+    """
+
+    complete_path, partial_path, legacy_path = _model_paths()
+    complete_path.parent.mkdir(parents=True, exist_ok=True)
+    if complete_path.is_file():
+        return complete_path
+    if not partial_path.exists() and legacy_path.is_file():
+        print(f"Migrating resumable Torch cache: {legacy_path}")
+        shutil.move(legacy_path, partial_path)
+
+    total: int | None = None
+    while True:
+        offset = partial_path.stat().st_size if partial_path.exists() else 0
+        headers = {"Range": f"bytes={offset}-"} if offset else {}
+        request = Request(MODEL_URL, headers=headers)
+        print(f"Downloading VGGT weights to {partial_path} (resuming at {offset:,} bytes)")
+        try:
+            with urlopen(request, timeout=60) as response:
+                status = getattr(response, "status", response.getcode())
+                if offset and status != 206:
+                    print("Server did not accept the range request; restarting the partial download")
+                    offset = 0
+                mode = "ab" if offset else "wb"
+                content_range = response.headers.get("Content-Range", "")
+                content_length = int(response.headers.get("Content-Length", "0"))
+                if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
+                    total = int(content_range.rsplit("/", 1)[1])
+                elif content_length:
+                    total = offset + content_length
+                downloaded = offset
+                with partial_path.open(mode) as output:
+                    while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                        output.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            print(
+                                f"Downloaded {downloaded / 1024**3:.2f} / {total / 1024**3:.2f} GiB",
+                                end="\r",
+                            )
+            print()
+        except OSError as exc:
+            print(f"Weight download connection interrupted: {exc}")
+
+        current_size = partial_path.stat().st_size if partial_path.exists() else 0
+        if total and current_size == total:
+            partial_path.replace(complete_path)
+            return complete_path
+        expected = f" of {total:,} bytes" if total else ""
+        print(
+            f"Weight download paused at {current_size:,}{expected}; retrying in "
+            f"{DOWNLOAD_RETRY_DELAY_SECONDS} seconds"
+        )
+        time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
 
 
 def main() -> None:
@@ -77,7 +167,8 @@ def main() -> None:
     print(f"Using device: {device}")
     print(f"Loading VGGT model from {MODEL_URL}")
     model = VGGT()
-    model.load_state_dict(torch.hub.load_state_dict_from_url(MODEL_URL, map_location="cpu"))
+    model_path = _download_model_weights()
+    model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
     model.eval()
     if device.type == "cuda":
         model.half()
