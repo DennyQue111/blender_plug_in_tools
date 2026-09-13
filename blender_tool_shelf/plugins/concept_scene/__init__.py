@@ -171,11 +171,11 @@ class BTS_OT_create_vggt_depth_mesh(bpy.types.Operator):
             self.report({"ERROR"}, f"Could not read VGGT scene data: {exc}")
             return {"CANCELLED"}
 
-        # Saved arrays have shape [frame, channel, height, width] for the current VGGT version.
-        while depth.ndim > 2:
-            depth = depth[0]
-        while confidence.ndim > 2:
-            confidence = confidence[0]
+        # VGGT currently saves depth as [frame, height, width, channel] and
+        # confidence as [frame, height, width]. Remove only singleton axes;
+        # repeatedly indexing [0] would incorrectly turn depth into one column.
+        depth = np.squeeze(depth)
+        confidence = np.squeeze(confidence)
         if depth.ndim != 2 or confidence.shape != depth.shape:
             self.report({"ERROR"}, "VGGT depth and confidence arrays have incompatible shapes")
             return {"CANCELLED"}
