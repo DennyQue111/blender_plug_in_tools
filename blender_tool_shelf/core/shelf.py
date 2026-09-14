@@ -85,6 +85,9 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
                 box.label(text="Depth Mesh (2.5D)", icon="MOD_TRIANGULATE")
                 box.prop(context.scene, "bts_vggt_depth_mesh_stride")
                 box.prop(context.scene, "bts_vggt_depth_mesh_confidence")
+                if context.scene.bts_vggt_confidence_summary:
+                    for line in context.scene.bts_vggt_confidence_summary.splitlines():
+                        box.label(text=line, icon="INFO")
                 box.prop(context.scene, "bts_vggt_depth_mesh_discontinuity")
                 box.operator("bts.create_vggt_depth_mesh", icon="MOD_TRIANGULATE")
                 box.separator()

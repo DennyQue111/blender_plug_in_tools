@@ -55,6 +55,27 @@ def _depth_mesh_paths(scene: bpy.types.Scene) -> tuple[Path, Path, Path, Path]:
     )
 
 
+def _update_confidence_summary(scene: bpy.types.Scene) -> None:
+    """Read the finished job's confidence map once for the Shelf UI."""
+    _depth_path, confidence_path, _cameras_path, _image_directory = _depth_mesh_paths(scene)
+    try:
+        confidence = np.squeeze(np.load(confidence_path))
+        values = confidence[np.isfinite(confidence)]
+    except (OSError, ValueError):
+        scene.bts_vggt_confidence_summary = "Confidence data is unavailable for this job"
+        return
+
+    if values.size == 0:
+        scene.bts_vggt_confidence_summary = "Confidence data contains no finite samples"
+        return
+
+    low, median, high, maximum = np.percentile(values, (5, 50, 95, 100))
+    scene.bts_vggt_confidence_summary = (
+        f"Confidence: {values.min():.3f}–{maximum:.3f} | median {median:.3f} | P95 {high:.3f}\n"
+        f"Suggested mesh start: {low:.3f} (P05; preserves connected depth)"
+    )
+
+
 class BTS_OT_toggle_concept_scene(bpy.types.Operator):
     bl_idname = "bts.toggle_concept_scene"
     bl_label = "Concept Scene"
@@ -108,6 +129,7 @@ class BTS_OT_submit_vggt_job(bpy.types.Operator):
         scene.bts_vggt_status_path = status_url
         scene.bts_vggt_job_directory = ""
         scene.bts_vggt_job_status = "Queued"
+        scene.bts_vggt_confidence_summary = ""
         self.report({"INFO"}, f"VGGT job {job_id[:8]} queued with {len(image_paths)} image(s)")
         return {"FINISHED"}
 
@@ -138,6 +160,10 @@ class BTS_OT_check_vggt_job(bpy.types.Operator):
         if isinstance(log_tail, str):
             scene.bts_vggt_log_tail = log_tail
         scene.bts_vggt_job_status = str(status if not error else f"{status}: {error}")
+        if status == "succeeded" and not error:
+            _update_confidence_summary(scene)
+        elif status != "succeeded":
+            scene.bts_vggt_confidence_summary = ""
         self.report({"INFO"}, f"VGGT job status: {status}")
         return {"FINISHED"}
 
@@ -406,7 +432,10 @@ class BTS_OT_create_vggt_depth_mesh(bpy.types.Operator):
                 faces.extend(((a, b, c), (a, c, d)))
 
         if not faces:
-            self.report({"ERROR"}, "No mesh faces survived the depth/confidence filters")
+            self.report(
+                {"ERROR"},
+                "No mesh faces survived the filters; lower Min Confidence (try 1.00) or raise Depth Edge",
+            )
             return {"CANCELLED"}
 
         mesh = bpy.data.meshes.new("VGGT_DepthMesh")
@@ -476,6 +505,7 @@ def register() -> None:
     bpy.types.Scene.bts_vggt_status_path = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_job_directory = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_log_tail = StringProperty(options={"HIDDEN"})
+    bpy.types.Scene.bts_vggt_confidence_summary = StringProperty(options={"HIDDEN"})
     bpy.types.Scene.bts_vggt_job_status = StringProperty(default="Service not contacted")
     bpy.types.Scene.bts_vggt_depth_mesh_stride = IntProperty(
         name="Mesh Resolution",
@@ -487,7 +517,9 @@ def register() -> None:
     bpy.types.Scene.bts_vggt_depth_mesh_confidence = FloatProperty(
         name="Min Confidence",
         description="Remove depth samples below this VGGT confidence",
-        default=1.2,
+        # VGGT confidence is not normalized to 0..1. Its valid baseline is
+        # commonly 1.0, so 1.2 removes almost every sample on many images.
+        default=1.0,
         min=0.0,
         max=100.0,
     )
@@ -509,6 +541,7 @@ def unregister() -> None:
         "bts_vggt_job_status",
         "bts_vggt_job_directory",
         "bts_vggt_log_tail",
+        "bts_vggt_confidence_summary",
         "bts_vggt_depth_mesh_discontinuity",
         "bts_vggt_depth_mesh_confidence",
         "bts_vggt_depth_mesh_stride",
