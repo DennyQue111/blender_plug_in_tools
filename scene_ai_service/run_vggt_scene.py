@@ -94,6 +94,14 @@ def _model_paths() -> tuple[Path, Path, Path]:
     return complete_path, partial_path, legacy_path
 
 
+def _remote_model_size() -> int | None:
+    """Return the model's byte length without downloading its body."""
+    request = Request(MODEL_URL, method="HEAD")
+    with urlopen(request, timeout=60) as response:
+        value = response.headers.get("X-Linked-Size") or response.headers.get("Content-Length")
+    return int(value) if value and value.isdigit() else None
+
+
 def _download_model_weights() -> Path:
     """Download model weights with HTTP Range support and atomic completion.
 
@@ -109,6 +117,13 @@ def _download_model_weights() -> Path:
     if not partial_path.exists() and legacy_path.is_file():
         print(f"Migrating resumable Torch cache: {legacy_path}")
         shutil.move(legacy_path, partial_path)
+
+    if partial_path.exists():
+        remote_size = _remote_model_size()
+        if remote_size is not None and partial_path.stat().st_size == remote_size:
+            print("Resumed VGGT weight file is already complete")
+            partial_path.replace(complete_path)
+            return complete_path
 
     total: int | None = None
     while True:
