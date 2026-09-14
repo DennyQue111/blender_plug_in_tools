@@ -56,7 +56,7 @@ class VIEW3D_PT_tool_shelf_modeling(bpy.types.Panel):
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        layout.operator("bts.hello_tool", text="Hello Tool", icon="SOLO_ON")
+        layout.operator("bts.init_position", text="Init Tool: Init Position", icon="OBJECT_ORIGIN")
         layout.operator("bts.start_retopo_helper", text="Retopo Helper", icon="MESH_DATA")
         layout.separator()
         layout.operator("bts.toggle_concept_scene", text="Concept Scene", icon="IMAGE_DATA")

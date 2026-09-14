@@ -8,7 +8,7 @@ unfinished folders while developing.
 from __future__ import annotations
 
 ENABLED_PLUGINS = (
-    "hello_tool",
+    "init_tool",
     "retopo_helper",
     "concept_scene",
 )

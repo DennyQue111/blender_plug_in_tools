@@ -12,7 +12,7 @@ blender_plug_in_tools/
 │  ├─ core/                     # 与具体工具无关的框架代码
 │  ├─ plugins/                  # 每个工具一个独立包
 │  │  ├─ __init__.py            # 插件白名单/发现机制
-│  │  └─ hello_tool/            # 参考插件
+│  │  └─ init_tool/             # 场景初始化工具
 │  ├─ resources/                # icons、presets、templates 等资源
 │  └─ utils/                    # 通用辅助代码
 ├─ tests/                       # 不依赖 Blender 的单元测试和 Blender 集成测试
@@ -25,10 +25,10 @@ blender_plug_in_tools/
 
 1. 在 Blender 的 Preferences > Add-ons 中选择 `blender_tool_shelf` 目录（或将整个目录压缩成 zip 后安装）。
 2. 启用 **Blender Tool Shelf**。
-3. 在 3D View 按 `N`，打开 **Tool Shelf** 标签页，点击 **Hello Tool** 验证加载。
+3. 在 3D View 按 `N`，打开 **Tool Shelf** 标签页，选择一个未被父级约束的 Mesh，点击 **Init Tool: Init Position**。它会将对象原点设为顶点平均中心、移动到世界原点，并应用位置变换。
 4. 开发时修改代码后，在 Blender 的 Python Console 执行 `bpy.ops.script.reload()`，必要时先禁用再启用本 Add-on。
 
-新增插件时，复制 `blender_tool_shelf/plugins/hello_tool`，实现 `register()`/`unregister()`，然后把完整模块名加入 `ENABLED_PLUGINS`。插件不要把状态写回自己的安装目录；用户数据应放在 Blender 的用户配置目录。
+新增插件时，复制 `blender_tool_shelf/plugins/init_tool`，实现 `register()`/`unregister()`，然后把完整模块名加入 `ENABLED_PLUGINS`。插件不要把状态写回自己的安装目录；用户数据应放在 Blender 的用户配置目录。
 
 ## 设计原则
 
@@ -106,13 +106,13 @@ bpy.ops.preferences.addon_refresh()
 
 ### 新增插件
 
-1. 复制 `blender_tool_shelf/plugins/hello_tool` 为新的插件目录，例如 `my_tool`。
+1. 复制 `blender_tool_shelf/plugins/init_tool` 为新的插件目录，例如 `my_tool`。
 2. 实现插件自己的 `register()`/`unregister()`，并在 `CLASSES` 中集中管理 Blender 类。
 3. 在 `blender_tool_shelf/plugins/__init__.py` 中加入目录名：
 
 ```python
 ENABLED_PLUGINS = (
-    "hello_tool",
+    "init_tool",
     "my_tool",
 )
 ```
